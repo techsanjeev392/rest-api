@@ -7,7 +7,7 @@ import com.springboot3.restapis.model.Library;
 import com.springboot3.restapis.model.Student;
 import com.springboot3.restapis.repository.LibraryRepository;
 import com.springboot3.restapis.repository.StudentRepository;
-import com.springboot3.restapis.service.student.executors.StudentExecutor;
+import com.springboot3.restapis.service.student.executors.LibrarySaveTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +16,9 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -80,12 +83,17 @@ public class StudentService implements CurdInterface<StudentDto, Long> {
     }
 
     private Response<?> persistLibrary(Library lib) {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
-            StudentExecutor exec = new StudentExecutor(null, libraryRepository, lib);
-            return exec.call();
+            LibrarySaveTask exec = new LibrarySaveTask(libraryRepository,lib);
+            Future<Response> future = executor.submit(exec);
+
+            return future.get(); // wait for result
         } catch (Exception e) {
             logger.error("Library insert task failed for title '{}': {}", lib.getTitle(), e.getMessage(), e);
             return Response.error("Executor failed: " + e.getMessage(), 500);
+        } finally {
+            executor.shutdown();
         }
     }
 
