@@ -1,5 +1,6 @@
 package com.springboot3.restapis.service;
 
+import com.springboot3.restapis.config.BookConfig;
 import com.springboot3.restapis.dto.Response;
 import com.springboot3.restapis.dto.StudentDto;
 import com.springboot3.restapis.interfaces.CurdInterface;
@@ -14,8 +15,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -29,6 +32,10 @@ public class StudentService implements CurdInterface<StudentDto, Long> {
 
     private final StudentRepository repository;
     private final LibraryRepository libraryRepository;
+
+    @Autowired
+    private BookConfig bookConfig;
+
 
     @Autowired
     public StudentService(StudentRepository repository, LibraryRepository libraryRepository) {
@@ -57,27 +64,19 @@ public class StudentService implements CurdInterface<StudentDto, Long> {
         Student saved = repository.save(toEntity(entity));
 
         // After successfully saving student, insert common books associated with this student
-        String[] titles = new String[]{
-                "Annihilation of Caste",
-                "Castes in India: Their Mechanism, Genesis and Development",
-                "The Untouchables: Who are They and Why They Became Untouchables",
-                "The Buddha and His Dhamma",
-                "Waiting for a Visa"
-        };
-
-        // Use IntStream to build Library objects, persist them via helper, collect Responses into a List
-        List<Response<?>> responses = IntStream.range(0, titles.length)
-                .mapToObj(i -> {
-                    String title = titles[i];
-                    // include saved student id to ensure ISBN uniqueness across repeated operations
-                    String isbn = "ISBN-" + saved.getId() + "-" + (1000 + i);
+        List<Response> libraryResponses = new ArrayList<>();
+        bookConfig.getNames().forEach(title ->
+                {
+                    String isbn = "ISBN-" + (1000 + new Random().nextInt(9000));
                     Library lib = new Library(title, null, isbn, saved);
-                    return persistLibrary(lib);
-                })
-                .collect(Collectors.toList());
+                    libraryResponses.add(persistLibrary(lib));
+                }
+
+        );
+
 
         // Log all responses at once
-        logger.info("Inserted {} library records for student {}: {}", responses.size(), saved.getId(), responses);
+        logger.info("Inserted {} library records for student {}: {}", libraryResponses.size(), saved.getId(), libraryResponses.toString());
 
         return Response.created(toDto(saved));
     }
@@ -85,7 +84,7 @@ public class StudentService implements CurdInterface<StudentDto, Long> {
     private Response<?> persistLibrary(Library lib) {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
-            LibrarySaveTask exec = new LibrarySaveTask(libraryRepository,lib);
+            LibrarySaveTask exec = new LibrarySaveTask(libraryRepository, lib);
             Future<Response> future = executor.submit(exec);
 
             return future.get(); // wait for result
